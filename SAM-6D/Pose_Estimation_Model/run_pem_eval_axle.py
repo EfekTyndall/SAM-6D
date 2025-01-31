@@ -13,6 +13,7 @@ import torch
 import torchvision.transforms as transforms
 import cv2
 import time
+import csv
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.join(BASE_DIR, '..', 'Pose_Estimation_Model')
@@ -83,7 +84,6 @@ def init():
     gorilla.utils.set_cuda_visible_devices(gpu_ids = cfg.gpus)
 
     return  cfg
-
 
 
 from data_utils import (
@@ -321,7 +321,7 @@ if __name__ == "__main__":
     gorilla.solver.load_checkpoint(model=model, filename=checkpoint)
 
     print("=> extracting templates ...")
-    tem_path = os.path.join(cfg.output_dir, 'templates')
+    tem_path = "/home/martyn/Thesis/pose-estimation/methods/SAM-6D/SAM-6D/Data/output_sam6d_axle/templates/"
     all_tem, all_tem_pts, all_tem_choose = get_templates(tem_path, cfg.test_dataset)
     with torch.no_grad():
         all_tem_pts, all_tem_feat = model.feature_extraction.get_obj_feats(all_tem, all_tem_pts, all_tem_choose)
@@ -339,8 +339,6 @@ if __name__ == "__main__":
         input_data['dense_po'] = all_tem_pts.repeat(ninstance,1,1)
         input_data['dense_fo'] = all_tem_feat.repeat(ninstance,1,1)
         out = model(input_data)
-    inference_runtime = time.time() - inference_start_time
-    print(f"  Inference runtime: {inference_runtime:.2f} seconds")
 
     if 'pred_pose_score' in out.keys():
         pose_scores = out['pred_pose_score'] * out['score']
@@ -350,24 +348,26 @@ if __name__ == "__main__":
     pred_rot = out['pred_R'].detach().cpu().numpy()
     pred_trans = out['pred_t'].detach().cpu().numpy() * 1000
 
+    inference_runtime = time.time() - inference_start_time
+
     print("=> saving results ...")
-    os.makedirs(f"{cfg.output_dir}/sam6d_results", exist_ok=True)
+    os.makedirs(cfg.output_dir, exist_ok=True)
     for idx, det in enumerate(detections):
         detections[idx]['score'] = float(pose_scores[idx])
         detections[idx]['R'] = list(pred_rot[idx].tolist())
         detections[idx]['t'] = list(pred_trans[idx].tolist())
 
-    with open(os.path.join(f"{cfg.output_dir}/sam6d_results", 'detection_pem.json'), "w") as f:
+    with open(os.path.join(cfg.output_dir, 'detection_pem.json'), "w") as f:
         json.dump(detections, f)
 
     print("=> visualizating ...")
-    save_path = os.path.join(f"{cfg.output_dir}/sam6d_results", 'vis_pem.png')
+    save_path = os.path.join(cfg.output_dir, 'vis_pem.png')
     valid_masks = pose_scores == pose_scores.max()
     K = input_data['K'].detach().cpu().numpy()[valid_masks]
     vis_img = visualize(img, pred_rot[valid_masks], pred_trans[valid_masks], model_points*1000, K, save_path)
     vis_img.save(save_path)
 
-    save_path_overlay = os.path.join(f"{cfg.output_dir}sam6d_results", 'vis_overlay.png')
+    save_path_overlay = os.path.join(cfg.output_dir, 'vis_overlay.png')
     point_cloud_path = "/home/martyn/Thesis/pose-estimation/data/point-clouds/point_cloud_high.ply"
 
     K_all = input_data['K'].detach().cpu().numpy()  # Extract all intrinsic matrices
@@ -382,4 +382,16 @@ if __name__ == "__main__":
         save_path_overlay
     )
     print(f"Visualization saved to {save_path_overlay}")
+
+    # Report Runtime
+    print(f"  Inference runtime: {inference_runtime:.2f} seconds")
+
+    # Save evaluation metrics as a CSV file
+    csv_save_path = os.path.join(cfg.output_dir, "evaluation_metrics.csv")
+    with open(csv_save_path, mode='w', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(["Inference Runtime (seconds)", inference_runtime])
+
+    print(f"Evaluation metrics saved to {csv_save_path}")
+
 

@@ -81,8 +81,9 @@ def draw_detections(image, pred_rots, pred_trans, model_points, intrinsics, colo
     bbox_3d = get_3d_bbox(scale, shift)
 
     # 3d point
-    choose = np.random.choice(np.arange(len(model_points)), 512)
-    pts_3d = model_points[choose].T
+    #choose = np.random.choice(np.arange(len(model_points)), 5120)
+    #pts_3d = model_points[choose].T
+    pts_3d = model_points.T
 
     for ind in range(num_pred_instances):
         # draw 3d bounding box

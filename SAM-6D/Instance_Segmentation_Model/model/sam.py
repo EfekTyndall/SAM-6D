@@ -75,11 +75,32 @@ class CustomSamAutomaticMaskGenerator(SamAutomaticMaskGenerator):
         logging.info(f"Init CustomSamAutomaticMaskGenerator done!")
 
     def preprocess_resize(self, image: np.ndarray):
+        # Validate input image
+        if not isinstance(image, np.ndarray) or image.ndim != 3 or image.shape[2] != 3:
+            raise ValueError(f"Invalid input image. Expected shape (H, W, 3), got {image.shape}")
+
+        # Validate segmentor_width_size
+        if self.segmentor_width_size is None or not isinstance(self.segmentor_width_size, int) or self.segmentor_width_size <= 0:
+            raise ValueError(f"Invalid segmentor_width_size: {self.segmentor_width_size}")
+    
+        # Original size
         orig_size = image.shape[:2]
+        print(f"Original image size: {orig_size}")
+
+        # Check if resizing is necessary
+        if orig_size == (int(self.segmentor_width_size * orig_size[0] / orig_size[1]), self.segmentor_width_size):
+            print("No resizing needed. Image size matches target dimensions.")
+            return image
+        
+        # Calculate proportional height
         height_size = int(self.segmentor_width_size * orig_size[0] / orig_size[1])
+        print(f"Resizing to: width={self.segmentor_width_size}, height={height_size}")
+
+        # Resize the image
         resized_image = cv2.resize(
             image.copy(), (self.segmentor_width_size, height_size)  # (width, height)
         )
+        print(f"Resized image size: {resized_image.shape}")
         return resized_image
 
     def postprocess_resize(self, detections, orig_size):
@@ -101,9 +122,14 @@ class CustomSamAutomaticMaskGenerator(SamAutomaticMaskGenerator):
 
     @torch.no_grad()
     def generate_masks(self, image: np.ndarray) -> List[Dict[str, Any]]:
+        print(f"generate_masks: Input image type: {type(image)}, shape: {getattr(image, 'shape', 'N/A')}")
+        if isinstance(image, np.ndarray):
+            print(f"generate_masks: dtype={image.dtype}, min={image.min()}, max={image.max()}")
         if self.segmentor_width_size is not None:
             orig_size = image.shape[:2]
+            print(f"Original size: {orig_size}")
             image = self.preprocess_resize(image)
+            print(f"Resized image shape: {image.shape}")
         # Generate masks
         mask_data = self._generate_masks(image)
 
